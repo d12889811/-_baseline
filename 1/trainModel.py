@@ -21,17 +21,17 @@ LR = 0.0002
 norm_mean = [0.485, 0.456, 0.406]
 norm_std = [0.229, 0.224, 0.225]
 log_interval = 1
-val_interval = 0
+val_epoch = 1
 learning_rate_decay_start = 20  # 50
 learning_rate_decay_every = 1 # 5
 learning_rate_decay_rate = 0.8 # 0.9
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 torch.cuda.empty_cache()
 
-train_dir='/home/fer_sub_DA'
-valid_dir='/home/1/jaffe/split/valid'
+train_dir='/home/fer_subset_split/train'
+valid_dir='/home/fer_subset_split/valid'
 test_dir='/home/1/jaffe/split/test'
 
 train_transform = transforms.Compose([
@@ -52,11 +52,12 @@ valid_data = JAFFEDataset(data_dir=valid_dir, transform=valid_transform)
 train_dataset_size = len(train_data)
 val_dataset_size = len(valid_data)
 
-train_loader = DataLoader(dataset=train_data, batch_size=BATCH_SIZE,shuffle=True)
+train_loader = DataLoader(dataset=train_data, batch_size=BATCH_SIZE,shuffle=True,num_workers=6)
 valid_loader = DataLoader(dataset=valid_data, batch_size=BATCH_SIZE)
 
 print('==> Building model..')
-net = VGG('VGG19')
+#net = torchvision.models.resnet18()
+net=VGG('VGG19')
 net.cuda()
 print('==> Building model finish')
 
@@ -79,7 +80,12 @@ iter_count = 0
 # 构建 SummaryWriter
 #writer = SummaryWriter(comment='test_your_comment', filename_suffix="_test_your_filename_suffix")
 
-
+#当前最大val 准确率
+max_acc=0
+#最佳epoch
+opt_epoch=0
+#最佳参数字典
+opt_dict=dict()
 for epoch in range(MAX_EPOCH):
     loss_mean = 0.
     correct = 0.
@@ -137,7 +143,7 @@ for epoch in range(MAX_EPOCH):
     #scheduler.step()  # 每个 epoch 更新学习率
     # 每个 epoch 计算验证集得准确率和loss
     # validate the model
-    if val_interval != 0 and (epoch+1) % val_interval == 0:
+    if val_epoch != 0 and (epoch+1) % val_epoch == 0:
         correct_val = 0.
         total_val = 0.
         loss_val = 0.
@@ -152,31 +158,35 @@ for epoch in range(MAX_EPOCH):
 
                 predicted = torch.argmax(outputs.data, dim=1)
                 correct_val += (predicted == labels).sum().item()
-
                 loss_val += loss.data.item()
-
-            valid_curve.append(loss_val/val_dataset_size)
+                acc=correct_val / val_dataset_size
+            #valid_curve.append(loss_val/val_dataset_size)
             print("Valid:\t Epoch[{:0>3}/{:0>3}] Iteration[{:0>3}/{:0>3}] Loss: {:.4f} Acc:{:.2%}".format(
-                epoch, MAX_EPOCH, j+1, len(valid_loader), loss_val / val_dataset_size, correct_val / val_dataset_size))
+                epoch, MAX_EPOCH, j+1, len(valid_loader), loss_val / val_dataset_size, acc))
             # 记录数据，保存于event file
+            if acc > max_acc:
+                max_acc=acc
+                opt_dict=net.state_dict()
+                opt_epoch=epoch
             #writer.add_scalars("Loss", {"Valid": np.mean(valid_curve)}, iter_count)
             #writer.add_scalars("Accuracy", {"Valid": correct / total}, iter_count)
 
 if not os.path.exists(os.path.join(os.getcwd(),'save_model')):
     os.mkdir(os.path.join(os.getcwd(),'save_model'))
-torch.save(net.state_dict(), os.path.join(os.getcwd(),'save_model'))
+if epoch+1 == 50:
+    torch.save(opt_dict, os.path.join(os.getcwd(),'save_model','VGG_sub_split_epoch_{}.pkl'.format(opt_epoch+1)))
 train_x = range(len(train_curve))
 train_y = train_curve
 
 train_iters = len(train_loader)
-valid_x = np.arange(1, len(valid_curve)+1) * train_iters*val_interval # 由于valid中记录的是epochloss，需要对记录点进行转换到iterations
-valid_y = valid_curve
+#valid_x = np.arange(1, len(valid_curve)+1) * train_iters*val_epoch # 由于valid中记录的是epochloss，需要对记录点进行转换到iterations
+#valid_y = valid_curve
 
-plt.plot(train_x, train_y, label='Train')
-if len(valid_y)>0:
-    plt.plot(valid_x, valid_y, label='Valid')
+#plt.plot(train_x, train_y, label='Train')
+#if len(valid_y)>0:
+    #plt.plot(valid_x, valid_y, label='Valid')
 
-plt.legend(loc='upper right')
-plt.ylabel('loss value')
-plt.xlabel('Iteration')
-plt.savefig('./cross_result_loss.jpg')
+#plt.legend(loc='upper right')
+#plt.ylabel('loss value')
+#plt.xlabel('Iteration')
+#plt.savefig('./cross_result_loss.jpg')

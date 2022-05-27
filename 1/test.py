@@ -17,9 +17,9 @@ from Dataset.myDataset import JAFFEDataset
 #设置参数
 
 BATCH_SIZE=32
-model_path=os.path.join(os.getcwd(),'save_model','vgg19_epoch_49.pkl')
+model_path=os.path.join(os.getcwd(),'save_model','resNet50_DA_split_epoch_39.pkl')
 device = torch.device("cuda")
-test_dir='/home/1/jaffe/original'
+test_dir='/home/ck+_crop'
 
 
 test_transform = transforms.Compose([
@@ -35,7 +35,8 @@ test_dataset_size = len(test_data)
 print(test_dataset_size)
 
 print('==> Loading model..')
-net = VGG('VGG19')
+#net=VGG('VGG19')
+net = torchvision.models.resnet50()
 net.load_state_dict(torch.load(model_path))
 net.to(device)
 print('==> Building model finish')
@@ -49,6 +50,7 @@ with torch.no_grad():
         labels=labels.to(device)
         outputs = net(inputs)
         predicted = torch.argmax(outputs.data, dim=1)
+	
         correct_val += (predicted == labels).sum().item()
 
     print("Test:\t Acc:{:.2%}".format( correct_val / test_dataset_size))
